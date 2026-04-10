@@ -1,0 +1,48 @@
+# Pebble build artifacts
+build/
+.lock-waf*
+.waf-*
+.waf3-*
+
+# Pebble SDK
+.pebble-sdk/
+
+# Screenshots (generated for app store)
+screenshots/
+
+# Node modules (if using JavaScript)
+node_modules/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Thumbnails
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.bak
+*.cache

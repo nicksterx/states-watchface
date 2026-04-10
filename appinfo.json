@@ -1,0 +1,16 @@
+{
+  "uuid": "4a8f2c3d-9e1b-47a5-b6c8-3d4e5f6a7b8c",
+  "shortName": "50 States",
+  "longName": "50 States",
+  "companyName": "Nick Bachicha",
+  "versionLabel": "1.1",
+  "sdkVersion": "3",
+  "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery"],
+  "watchapp": {
+    "watchface": true
+  },
+  "appKeys": {},
+  "resources": {
+    "media": []
+  }
+}

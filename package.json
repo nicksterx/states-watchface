@@ -1,0 +1,8 @@
+{
+  "name": "states-watchface",
+  "author": "Nick Bachicha",
+  "version": "1.0.0",
+  "keywords": ["pebble", "watchface", "usa", "states", "history", "education"],
+  "private": true,
+  "dependencies": {}
+}
