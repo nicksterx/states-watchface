@@ -7,10 +7,10 @@
  *   [divider]         1px
  *   [title]                — Gothic 24/28 Bold, white
  *   [subtitle]             — Gothic 14/18, gray
- *   [fact]           rest  — Gothic 14/18 Bold, yellow (wraps)
+ *   [fact]           rest  — Gothic 14/18/24 Bold, yellow (wraps)
  *
- * Text size (Normal/Large) is set from the phone-side settings page and
- * persisted on the watch.
+ * Text size (Normal/Large/Extra Large) is set from the phone-side settings
+ * page and persisted on the watch; see TEXT_SIZES for the font table.
  */
 
 #include <pebble.h>
@@ -27,9 +27,44 @@
 enum {
   TEXT_SIZE_NORMAL = 0,
   TEXT_SIZE_LARGE  = 1,
+  TEXT_SIZE_XLARGE = 2,
 };
 
-static int s_text_size = TEXT_SIZE_NORMAL;
+// Emery (Pebble Time 2) packs more pixels into a similar physical area, so
+// the same fonts render smaller — default to Large there.
+#if defined(PBL_PLATFORM_EMERY)
+  #define TEXT_SIZE_DEFAULT TEXT_SIZE_LARGE
+#else
+  #define TEXT_SIZE_DEFAULT TEXT_SIZE_NORMAL
+#endif
+
+typedef struct {
+  const char *title_font;
+  int16_t     title_h;
+  const char *subtitle_font;
+  int16_t     subtitle_h;
+  const char *fact_font;
+} TextSizeSpec;
+
+static const TextSizeSpec TEXT_SIZES[] = {
+  [TEXT_SIZE_NORMAL] = { FONT_KEY_GOTHIC_24_BOLD, 24,
+                         FONT_KEY_GOTHIC_14,      15,
+                         FONT_KEY_GOTHIC_14_BOLD },
+  [TEXT_SIZE_LARGE]  = { FONT_KEY_GOTHIC_28_BOLD, 30,
+                         FONT_KEY_GOTHIC_18,      20,
+                         FONT_KEY_GOTHIC_18_BOLD },
+  [TEXT_SIZE_XLARGE] = { FONT_KEY_GOTHIC_28_BOLD, 30,
+                         FONT_KEY_GOTHIC_18,      20,
+                         FONT_KEY_GOTHIC_24_BOLD },
+};
+
+static int s_text_size = TEXT_SIZE_DEFAULT;
+
+static int prv_clamp_text_size(int size) {
+  return (size >= TEXT_SIZE_NORMAL && size <= TEXT_SIZE_XLARGE)
+             ? size
+             : TEXT_SIZE_DEFAULT;
+}
 
 // ---------------------------------------------------------------------------
 // Layers & state
@@ -65,8 +100,9 @@ static void prv_apply_layout(void) {
   Layer  *root   = window_get_root_layer(s_window);
   GRect   bounds = layer_get_bounds(root);
   int16_t w      = bounds.size.w;
-  bool    large  = (s_text_size == TEXT_SIZE_LARGE);
   int16_t y      = 2;
+
+  const TextSizeSpec *spec = &TEXT_SIZES[prv_clamp_text_size(s_text_size)];
 
   // ---- Time ----
   layer_set_frame(text_layer_get_layer(s_time_layer), GRect(0, y, w, 42));
@@ -77,22 +113,19 @@ static void prv_apply_layout(void) {
   y += 4;
 
   // ---- Title ----
-  int16_t title_h = large ? 30 : 24;
-  text_layer_set_font(s_title_layer, fonts_get_system_font(
-      large ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD));
-  layer_set_frame(text_layer_get_layer(s_title_layer), GRect(2, y, w - 4, title_h));
-  y += title_h;
+  text_layer_set_font(s_title_layer, fonts_get_system_font(spec->title_font));
+  layer_set_frame(text_layer_get_layer(s_title_layer),
+                  GRect(2, y, w - 4, spec->title_h));
+  y += spec->title_h;
 
   // ---- Subtitle ----
-  int16_t sub_h = large ? 20 : 15;
-  text_layer_set_font(s_subtitle_layer, fonts_get_system_font(
-      large ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14));
-  layer_set_frame(text_layer_get_layer(s_subtitle_layer), GRect(2, y, w - 4, sub_h - 1));
-  y += sub_h;
+  text_layer_set_font(s_subtitle_layer, fonts_get_system_font(spec->subtitle_font));
+  layer_set_frame(text_layer_get_layer(s_subtitle_layer),
+                  GRect(2, y, w - 4, spec->subtitle_h - 1));
+  y += spec->subtitle_h;
 
   // ---- Fact (remaining space, wraps) ----
-  text_layer_set_font(s_fact_layer, fonts_get_system_font(
-      large ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD));
+  text_layer_set_font(s_fact_layer, fonts_get_system_font(spec->fact_font));
   layer_set_frame(text_layer_get_layer(s_fact_layer),
                   GRect(2, y, w - 4, bounds.size.h - y - 1));
 }
@@ -131,8 +164,7 @@ static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
   Tuple *text_size_tuple = dict_find(iter, MSG_KEY_TEXT_SIZE);
   if (text_size_tuple) {
-    s_text_size = (text_size_tuple->value->int32 != 0) ? TEXT_SIZE_LARGE
-                                                       : TEXT_SIZE_NORMAL;
+    s_text_size = prv_clamp_text_size(text_size_tuple->value->int32);
     persist_write_int(PERSIST_KEY_TEXT_SIZE, s_text_size);
     prv_apply_layout();
   }
@@ -207,8 +239,8 @@ static void prv_window_unload(Window *window) {
 // ---------------------------------------------------------------------------
 static void prv_init(void) {
   s_text_size = persist_exists(PERSIST_KEY_TEXT_SIZE)
-                    ? persist_read_int(PERSIST_KEY_TEXT_SIZE)
-                    : TEXT_SIZE_NORMAL;
+                    ? prv_clamp_text_size(persist_read_int(PERSIST_KEY_TEXT_SIZE))
+                    : TEXT_SIZE_DEFAULT;
 
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){

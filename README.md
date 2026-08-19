@@ -50,9 +50,12 @@ Open the watchface's settings in the Pebble phone app to choose a
 **Text Size**:
 
 - **Normal** — the original layout
-- **Large** — bigger title, subtitle, and fact text; recommended on
+- **Large** — bigger title, subtitle, and fact text (the default on
   Pebble Time 2, whose higher-resolution screen makes text render
-  physically smaller
+  physically smaller)
+- **Extra Large** — like Large, with the fact text bumped up another
+  step (Gothic 24 Bold); best on Pebble Time 2, where there's room
+  for it — on smaller screens the longest facts may not fully fit
 
 The choice is saved on the watch, so it sticks across restarts.
 

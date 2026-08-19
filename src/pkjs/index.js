@@ -7,8 +7,13 @@
 
 var STORAGE_KEY = 'textSize';
 
+function clampTextSize(size) {
+  size = parseInt(size, 10);
+  return (size >= 0 && size <= 2) ? size : 0;
+}
+
 function getTextSize() {
-  return localStorage.getItem(STORAGE_KEY) === '1' ? 1 : 0;
+  return clampTextSize(localStorage.getItem(STORAGE_KEY));
 }
 
 function buildConfigPage(currentSize) {
@@ -26,9 +31,10 @@ function buildConfigPage(currentSize) {
     'button{width:100%;padding:14px;font-size:17px;border:0;border-radius:6px;background:#ff4700;color:#fff;margin-top:10px}' +
     '</style></head><body>' +
     '<h1>Text Size</h1>' +
-    '<p class="hint">Large is recommended on Pebble Time 2, whose sharper screen makes text look smaller.</p>' +
+    '<p class="hint">Pebble Time 2 defaults to Large — its sharper screen makes text look smaller. Try Extra Large for maximum readability.</p>' +
     '<label><input type="radio" name="size" value="0"' + (currentSize === 0 ? ' checked' : '') + '>Normal</label>' +
     '<label><input type="radio" name="size" value="1"' + (currentSize === 1 ? ' checked' : '') + '>Large</label>' +
+    '<label><input type="radio" name="size" value="2"' + (currentSize === 2 ? ' checked' : '') + '>Extra Large</label>' +
     '<button onclick="save()">Save</button>' +
     '<script>' +
     'function save(){' +
@@ -54,7 +60,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
   } catch (err) {
     return;
   }
-  var size = settings.textSize ? 1 : 0;
+  var size = clampTextSize(settings.textSize);
   localStorage.setItem(STORAGE_KEY, String(size));
   Pebble.sendAppMessage({ TextSize: size });
 });
