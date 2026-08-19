@@ -44,13 +44,26 @@ within a single day.
 └─────────────────┘
 ```
 
+## Settings
+
+Open the watchface's settings in the Pebble phone app to choose a
+**Text Size**:
+
+- **Normal** — the original layout
+- **Large** — bigger title, subtitle, and fact text; recommended on
+  Pebble Time 2, whose higher-resolution screen makes text render
+  physically smaller
+
+The choice is saved on the watch, so it sticks across restarts.
+
 ## Setup (CloudPebble)
 
 1. Create a new **Pebble C SDK** project
 2. Set project type to **Watchface**
 3. Replace the default `main.c` with `src/c/main.c`
 4. Create a new file `src/c/states_data.h` and paste in the data file
-5. Build and install
+5. Add a JS file with the contents of `src/pkjs/index.js` (settings page)
+6. Build and install
 
 ## Setup (Local SDK)
 
@@ -65,4 +78,5 @@ pebble install --phone YOUR_PHONE_IP
 - **Project type**: Pebble C SDK
 - **App type**: Watchface
 - **SDK**: 3
-- No packages or capabilities needed
+- **Capabilities**: Configurable (for the settings page)
+- No packages needed

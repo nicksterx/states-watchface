@@ -1,17 +1,35 @@
 /*
  * States Watchface for Pebble Time
- * src/c/main.c  — v1.1 with state shape bitmaps
+ * src/c/main.c  — v1.2 with configurable text size
  *
- * Layout (144x168px):
+ * Layout (144x168px shown; widths/heights come from the window bounds):
  *   [time]           42px  — Bitham 42 Bold, white
  *   [divider]         1px
- *   [title]          24px  — Gothic 24 Bold, white
- *   [subtitle]       16px  — Gothic 14, gray
- *   [fact]           ~15px — Gothic 14 Bold, yellow (single line)
+ *   [title]                — Gothic 24/28 Bold, white
+ *   [subtitle]             — Gothic 14/18, gray
+ *   [fact]           rest  — Gothic 14/18 Bold, yellow (wraps)
+ *
+ * Text size (Normal/Large) is set from the phone-side settings page and
+ * persisted on the watch.
  */
 
 #include <pebble.h>
 #include "states_data.h"
+
+// ---------------------------------------------------------------------------
+// Settings
+// ---------------------------------------------------------------------------
+// AppMessage key — must match "TextSize" in appinfo.json appKeys.
+#define MSG_KEY_TEXT_SIZE 0
+// Persistent storage key.
+#define PERSIST_KEY_TEXT_SIZE 1
+
+enum {
+  TEXT_SIZE_NORMAL = 0,
+  TEXT_SIZE_LARGE  = 1,
+};
+
+static int s_text_size = TEXT_SIZE_NORMAL;
 
 // ---------------------------------------------------------------------------
 // Layers & state
@@ -36,6 +54,50 @@ static void prv_divider_draw(Layer *layer, GContext *ctx) {
 }
 
 // ---------------------------------------------------------------------------
+// Layout — positions layers and picks fonts for the current text size.
+// Safe to call again when the setting changes.
+// ---------------------------------------------------------------------------
+static void prv_apply_layout(void) {
+  if (!s_window || !s_time_layer) {
+    return;
+  }
+
+  Layer  *root   = window_get_root_layer(s_window);
+  GRect   bounds = layer_get_bounds(root);
+  int16_t w      = bounds.size.w;
+  bool    large  = (s_text_size == TEXT_SIZE_LARGE);
+  int16_t y      = 2;
+
+  // ---- Time ----
+  layer_set_frame(text_layer_get_layer(s_time_layer), GRect(0, y, w, 42));
+  y += 44;
+
+  // ---- Divider ----
+  layer_set_frame(s_divider_layer, GRect(8, y, w - 16, 1));
+  y += 4;
+
+  // ---- Title ----
+  int16_t title_h = large ? 30 : 24;
+  text_layer_set_font(s_title_layer, fonts_get_system_font(
+      large ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD));
+  layer_set_frame(text_layer_get_layer(s_title_layer), GRect(2, y, w - 4, title_h));
+  y += title_h;
+
+  // ---- Subtitle ----
+  int16_t sub_h = large ? 20 : 15;
+  text_layer_set_font(s_subtitle_layer, fonts_get_system_font(
+      large ? FONT_KEY_GOTHIC_18 : FONT_KEY_GOTHIC_14));
+  layer_set_frame(text_layer_get_layer(s_subtitle_layer), GRect(2, y, w - 4, sub_h - 1));
+  y += sub_h;
+
+  // ---- Fact (remaining space, wraps) ----
+  text_layer_set_font(s_fact_layer, fonts_get_system_font(
+      large ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD));
+  layer_set_frame(text_layer_get_layer(s_fact_layer),
+                  GRect(2, y, w - 4, bounds.size.h - y - 1));
+}
+
+// ---------------------------------------------------------------------------
 // Display update
 // ---------------------------------------------------------------------------
 static void prv_update_display(struct tm *tick_time) {
@@ -45,8 +107,6 @@ static void prv_update_display(struct tm *tick_time) {
   // Time
   clock_copy_time_string(s_time_buf, sizeof(s_time_buf));
   text_layer_set_text(s_time_layer, s_time_buf);
-
-  // Minute label removed
 
   // Text content
   const MinuteEntry *entry = &MINUTE_DATA[minute];
@@ -66,57 +126,63 @@ static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 // ---------------------------------------------------------------------------
+// AppMessage — settings from the phone
+// ---------------------------------------------------------------------------
+static void prv_inbox_received(DictionaryIterator *iter, void *context) {
+  Tuple *text_size_tuple = dict_find(iter, MSG_KEY_TEXT_SIZE);
+  if (text_size_tuple) {
+    s_text_size = (text_size_tuple->value->int32 != 0) ? TEXT_SIZE_LARGE
+                                                       : TEXT_SIZE_NORMAL;
+    persist_write_int(PERSIST_KEY_TEXT_SIZE, s_text_size);
+    prv_apply_layout();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Window load
 // ---------------------------------------------------------------------------
 static void prv_window_load(Window *window) {
-  Layer  *root   = window_get_root_layer(window);
-  GRect   bounds = layer_get_bounds(root);
-  int16_t w      = bounds.size.w;  // 144
-  int16_t y      = 2;
+  Layer *root = window_get_root_layer(window);
 
   window_set_background_color(window, GColorBlack);
 
   // ---- Time ----
-  s_time_layer = text_layer_create(GRect(0, y, w, 42));
+  s_time_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_time_layer, GColorClear);
   text_layer_set_text_color(s_time_layer, GColorWhite);
   text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
   text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_time_layer));
-  y += 44;
 
   // ---- Divider ----
-  s_divider_layer = layer_create(GRect(8, y, w - 16, 1));
+  s_divider_layer = layer_create(GRectZero);
   layer_set_update_proc(s_divider_layer, prv_divider_draw);
   layer_add_child(root, s_divider_layer);
-  y += 4;
 
   // ---- Title ----
-  s_title_layer = text_layer_create(GRect(2, y, w - 4, 24));
+  s_title_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_title_layer, GColorClear);
   text_layer_set_text_color(s_title_layer, GColorWhite);
-  text_layer_set_font(s_title_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_title_layer));
-  y += 24;
 
   // ---- Subtitle ----
-  s_subtitle_layer = text_layer_create(GRect(2, y, w - 4, 14));
+  s_subtitle_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_subtitle_layer, GColorClear);
   text_layer_set_text_color(s_subtitle_layer, GColorLightGray);
-  text_layer_set_font(s_subtitle_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14));
   text_layer_set_text_alignment(s_subtitle_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_subtitle_layer));
-  y += 15;
 
-  // ---- Fact (remaining space, wraps) ----
-  s_fact_layer = text_layer_create(GRect(2, y, w - 4, bounds.size.h - y - 1));
+  // ---- Fact ----
+  s_fact_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_fact_layer, GColorClear);
   text_layer_set_text_color(s_fact_layer, GColorYellow);
-  text_layer_set_font(s_fact_layer, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD));
   text_layer_set_text_alignment(s_fact_layer, GTextAlignmentCenter);
   text_layer_set_overflow_mode(s_fact_layer, GTextOverflowModeWordWrap);
   layer_add_child(root, text_layer_get_layer(s_fact_layer));
+
+  // ---- Frames & fonts for the current text size ----
+  prv_apply_layout();
 
   // ---- Initial render ----
   time_t now = time(NULL);
@@ -133,12 +199,17 @@ static void prv_window_unload(Window *window) {
   text_layer_destroy(s_title_layer);
   text_layer_destroy(s_subtitle_layer);
   text_layer_destroy(s_fact_layer);
+  s_time_layer = NULL;
 }
 
 // ---------------------------------------------------------------------------
 // Init / deinit
 // ---------------------------------------------------------------------------
 static void prv_init(void) {
+  s_text_size = persist_exists(PERSIST_KEY_TEXT_SIZE)
+                    ? persist_read_int(PERSIST_KEY_TEXT_SIZE)
+                    : TEXT_SIZE_NORMAL;
+
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){
     .load   = prv_window_load,
@@ -146,10 +217,14 @@ static void prv_init(void) {
   });
   window_stack_push(s_window, true);
   tick_timer_service_subscribe(MINUTE_UNIT, prv_tick_handler);
+
+  app_message_register_inbox_received(prv_inbox_received);
+  app_message_open(64, 16);
 }
 
 static void prv_deinit(void) {
   tick_timer_service_unsubscribe();
+  app_message_deregister_callbacks();
   window_destroy(s_window);
 }
 
