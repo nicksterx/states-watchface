@@ -44,13 +44,39 @@ within a single day.
 └─────────────────┘
 ```
 
+## Shake for another fact
+
+Shake or flick your wrist to cycle through the other facts for the
+state currently on screen.
+
+## Settings
+
+Open the watchface's settings in the Pebble phone app:
+
+- **Text Size** — Normal, Large, or Extra Large:
+  - **Normal** — the original layout
+  - **Large** — bigger title, subtitle, and fact text (the default on
+    Pebble Time 2, whose higher-resolution screen makes text render
+    physically smaller)
+  - **Extra Large** — like Large, with the fact text bumped up another
+    step (Gothic 24 Bold); best on Pebble Time 2, where there's room
+    for it — on smaller screens the longest facts may not fully fit
+- **Show capital & year line** — hide it to free room for the fact
+  text, so even the longest facts fit in Extra Large
+- **Background Color** and **Fact Color** — applied on color screens;
+  black & white watches pick the closest shade. With a light
+  background, the time and title automatically switch to dark text.
+
+All settings are saved on the watch, so they stick across restarts.
+
 ## Setup (CloudPebble)
 
 1. Create a new **Pebble C SDK** project
 2. Set project type to **Watchface**
 3. Replace the default `main.c` with `src/c/main.c`
 4. Create a new file `src/c/states_data.h` and paste in the data file
-5. Build and install
+5. Add a JS file with the contents of `src/pkjs/index.js` (settings page)
+6. Build and install
 
 ## Setup (Local SDK)
 
@@ -65,4 +91,5 @@ pebble install --phone YOUR_PHONE_IP
 - **Project type**: Pebble C SDK
 - **App type**: Watchface
 - **SDK**: 3
-- No packages or capabilities needed
+- **Capabilities**: Configurable (for the settings page)
+- No packages needed

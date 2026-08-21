@@ -3,13 +3,19 @@
   "shortName": "50 States",
   "longName": "50 States",
   "companyName": "Nick Bachicha",
-  "versionLabel": "1.1",
+  "versionLabel": "1.3",
   "sdkVersion": "3",
   "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery"],
   "watchapp": {
     "watchface": true
   },
-  "appKeys": {},
+  "capabilities": ["configurable"],
+  "appKeys": {
+    "TextSize": 0,
+    "ShowSubtitle": 1,
+    "BackgroundColor": 2,
+    "FactColor": 3
+  },
   "resources": {
     "media": []
   }
