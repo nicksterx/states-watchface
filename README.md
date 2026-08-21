@@ -44,20 +44,30 @@ within a single day.
 └─────────────────┘
 ```
 
+## Shake for another fact
+
+Shake or flick your wrist to cycle through the other facts for the
+state currently on screen.
+
 ## Settings
 
-Open the watchface's settings in the Pebble phone app to choose a
-**Text Size**:
+Open the watchface's settings in the Pebble phone app:
 
-- **Normal** — the original layout
-- **Large** — bigger title, subtitle, and fact text (the default on
-  Pebble Time 2, whose higher-resolution screen makes text render
-  physically smaller)
-- **Extra Large** — like Large, with the fact text bumped up another
-  step (Gothic 24 Bold); best on Pebble Time 2, where there's room
-  for it — on smaller screens the longest facts may not fully fit
+- **Text Size** — Normal, Large, or Extra Large:
+  - **Normal** — the original layout
+  - **Large** — bigger title, subtitle, and fact text (the default on
+    Pebble Time 2, whose higher-resolution screen makes text render
+    physically smaller)
+  - **Extra Large** — like Large, with the fact text bumped up another
+    step (Gothic 24 Bold); best on Pebble Time 2, where there's room
+    for it — on smaller screens the longest facts may not fully fit
+- **Show capital & year line** — hide it to free room for the fact
+  text, so even the longest facts fit in Extra Large
+- **Background Color** and **Fact Color** — applied on color screens;
+  black & white watches pick the closest shade. With a light
+  background, the time and title automatically switch to dark text.
 
-The choice is saved on the watch, so it sticks across restarts.
+All settings are saved on the watch, so they stick across restarts.
 
 ## Setup (CloudPebble)
 

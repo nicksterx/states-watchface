@@ -1,16 +1,19 @@
 /*
  * States Watchface for Pebble Time
- * src/c/main.c  — v1.2 with configurable text size
+ * src/c/main.c  — v1.3
  *
  * Layout (144x168px shown; widths/heights come from the window bounds):
- *   [time]           42px  — Bitham 42 Bold, white
+ *   [time]           42px  — Bitham 42 Bold
  *   [divider]         1px
- *   [title]                — Gothic 24/28 Bold, white
- *   [subtitle]             — Gothic 14/18, gray
- *   [fact]           rest  — Gothic 14/18/24 Bold, yellow (wraps)
+ *   [title]                — Gothic 24/28 Bold
+ *   [subtitle]             — Gothic 14/18 (optional, hideable)
+ *   [fact]           rest  — Gothic 14/18/24 Bold (wraps)
  *
- * Text size (Normal/Large/Extra Large) is set from the phone-side settings
- * page and persisted on the watch; see TEXT_SIZES for the font table.
+ * Settings (phone-side page, persisted on the watch):
+ *   - Text size: Normal / Large / Extra Large (see TEXT_SIZES)
+ *   - Show capital & year line
+ *   - Background color, fact color
+ * Shake/flick the watch to cycle to another fact for the current minute.
  */
 
 #include <pebble.h>
@@ -19,10 +22,20 @@
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-// AppMessage key — must match "TextSize" in appinfo.json appKeys.
-#define MSG_KEY_TEXT_SIZE 0
-// Persistent storage key.
-#define PERSIST_KEY_TEXT_SIZE 1
+// AppMessage keys — must match appKeys in appinfo.json.
+#define MSG_KEY_TEXT_SIZE     0
+#define MSG_KEY_SHOW_SUBTITLE 1
+#define MSG_KEY_BG_COLOR      2
+#define MSG_KEY_FACT_COLOR    3
+
+// Persistent storage keys.
+#define PERSIST_KEY_TEXT_SIZE     1
+#define PERSIST_KEY_SHOW_SUBTITLE 2
+#define PERSIST_KEY_BG_COLOR      3
+#define PERSIST_KEY_FACT_COLOR    4
+
+#define DEFAULT_BG_COLOR   0x000000
+#define DEFAULT_FACT_COLOR 0xFFFF00
 
 enum {
   TEXT_SIZE_NORMAL = 0,
@@ -58,12 +71,22 @@ static const TextSizeSpec TEXT_SIZES[] = {
                          FONT_KEY_GOTHIC_24_BOLD },
 };
 
-static int s_text_size = TEXT_SIZE_DEFAULT;
+static int     s_text_size      = TEXT_SIZE_DEFAULT;
+static bool    s_show_subtitle  = true;
+static int32_t s_bg_color_hex   = DEFAULT_BG_COLOR;
+static int32_t s_fact_color_hex = DEFAULT_FACT_COLOR;
 
 static int prv_clamp_text_size(int size) {
   return (size >= TEXT_SIZE_NORMAL && size <= TEXT_SIZE_XLARGE)
              ? size
              : TEXT_SIZE_DEFAULT;
+}
+
+static bool prv_color_is_light(int32_t hex) {
+  int r = (hex >> 16) & 0xFF;
+  int g = (hex >> 8) & 0xFF;
+  int b = hex & 0xFF;
+  return (r * 299 + g * 587 + b * 114) / 1000 >= 128;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +102,9 @@ static TextLayer   *s_fact_layer;
 static char s_time_buf[8];
 static char s_fact_buf[80];
 
+// Shake/flick advances this to show another fact for the current minute.
+static int s_fact_offset = 0;
+
 // ---------------------------------------------------------------------------
 // Divider
 // ---------------------------------------------------------------------------
@@ -89,8 +115,8 @@ static void prv_divider_draw(Layer *layer, GContext *ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Layout — positions layers and picks fonts for the current text size.
-// Safe to call again when the setting changes.
+// Layout — positions layers and picks fonts for the current settings.
+// Safe to call again when a setting changes.
 // ---------------------------------------------------------------------------
 static void prv_apply_layout(void) {
   if (!s_window || !s_time_layer) {
@@ -118,16 +144,41 @@ static void prv_apply_layout(void) {
                   GRect(2, y, w - 4, spec->title_h));
   y += spec->title_h;
 
-  // ---- Subtitle ----
-  text_layer_set_font(s_subtitle_layer, fonts_get_system_font(spec->subtitle_font));
-  layer_set_frame(text_layer_get_layer(s_subtitle_layer),
-                  GRect(2, y, w - 4, spec->subtitle_h - 1));
-  y += spec->subtitle_h;
+  // ---- Subtitle (optional) ----
+  layer_set_hidden(text_layer_get_layer(s_subtitle_layer), !s_show_subtitle);
+  if (s_show_subtitle) {
+    text_layer_set_font(s_subtitle_layer,
+                        fonts_get_system_font(spec->subtitle_font));
+    layer_set_frame(text_layer_get_layer(s_subtitle_layer),
+                    GRect(2, y, w - 4, spec->subtitle_h - 1));
+    y += spec->subtitle_h;
+  }
 
   // ---- Fact (remaining space, wraps) ----
   text_layer_set_font(s_fact_layer, fonts_get_system_font(spec->fact_font));
   layer_set_frame(text_layer_get_layer(s_fact_layer),
                   GRect(2, y, w - 4, bounds.size.h - y - 1));
+}
+
+// ---------------------------------------------------------------------------
+// Colors — applies background/fact colors; time/title/subtitle flip between
+// light-on-dark and dark-on-light based on the background's luminance.
+// ---------------------------------------------------------------------------
+static void prv_apply_colors(void) {
+  if (!s_window || !s_time_layer) {
+    return;
+  }
+
+  bool   light_bg = prv_color_is_light(s_bg_color_hex);
+  GColor primary  = light_bg ? GColorBlack : GColorWhite;
+  GColor muted    = light_bg ? GColorDarkGray : GColorLightGray;
+
+  window_set_background_color(s_window, GColorFromHEX(s_bg_color_hex));
+  text_layer_set_text_color(s_time_layer, primary);
+  text_layer_set_text_color(s_title_layer, primary);
+  text_layer_set_text_color(s_subtitle_layer, muted);
+  text_layer_set_text_color(s_fact_layer, GColorFromHEX(s_fact_color_hex));
+  layer_mark_dirty(s_divider_layer);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +197,7 @@ static void prv_update_display(struct tm *tick_time) {
   text_layer_set_text(s_title_layer,    entry->title);
   text_layer_set_text(s_subtitle_layer, entry->subtitle);
 
-  uint8_t fact_index = yday % entry->fact_count;
+  uint8_t fact_index = (yday + s_fact_offset) % entry->fact_count;
   snprintf(s_fact_buf, sizeof(s_fact_buf), "%s", entry->facts[fact_index]);
   text_layer_set_text(s_fact_layer, s_fact_buf);
 }
@@ -159,15 +210,39 @@ static void prv_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
 }
 
 // ---------------------------------------------------------------------------
+// Shake/flick — show another fact for the current minute
+// ---------------------------------------------------------------------------
+static void prv_tap_handler(AccelAxisType axis, int32_t direction) {
+  s_fact_offset++;
+  time_t now = time(NULL);
+  prv_update_display(localtime(&now));
+}
+
+// ---------------------------------------------------------------------------
 // AppMessage — settings from the phone
 // ---------------------------------------------------------------------------
 static void prv_inbox_received(DictionaryIterator *iter, void *context) {
-  Tuple *text_size_tuple = dict_find(iter, MSG_KEY_TEXT_SIZE);
-  if (text_size_tuple) {
-    s_text_size = prv_clamp_text_size(text_size_tuple->value->int32);
+  Tuple *t;
+
+  if ((t = dict_find(iter, MSG_KEY_TEXT_SIZE))) {
+    s_text_size = prv_clamp_text_size(t->value->int32);
     persist_write_int(PERSIST_KEY_TEXT_SIZE, s_text_size);
-    prv_apply_layout();
   }
+  if ((t = dict_find(iter, MSG_KEY_SHOW_SUBTITLE))) {
+    s_show_subtitle = (t->value->int32 != 0);
+    persist_write_bool(PERSIST_KEY_SHOW_SUBTITLE, s_show_subtitle);
+  }
+  if ((t = dict_find(iter, MSG_KEY_BG_COLOR))) {
+    s_bg_color_hex = t->value->int32;
+    persist_write_int(PERSIST_KEY_BG_COLOR, s_bg_color_hex);
+  }
+  if ((t = dict_find(iter, MSG_KEY_FACT_COLOR))) {
+    s_fact_color_hex = t->value->int32;
+    persist_write_int(PERSIST_KEY_FACT_COLOR, s_fact_color_hex);
+  }
+
+  prv_apply_layout();
+  prv_apply_colors();
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +251,9 @@ static void prv_inbox_received(DictionaryIterator *iter, void *context) {
 static void prv_window_load(Window *window) {
   Layer *root = window_get_root_layer(window);
 
-  window_set_background_color(window, GColorBlack);
-
   // ---- Time ----
   s_time_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_time_layer, GColorClear);
-  text_layer_set_text_color(s_time_layer, GColorWhite);
   text_layer_set_font(s_time_layer, fonts_get_system_font(FONT_KEY_BITHAM_42_BOLD));
   text_layer_set_text_alignment(s_time_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_time_layer));
@@ -194,27 +266,25 @@ static void prv_window_load(Window *window) {
   // ---- Title ----
   s_title_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_title_layer, GColorClear);
-  text_layer_set_text_color(s_title_layer, GColorWhite);
   text_layer_set_text_alignment(s_title_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_title_layer));
 
   // ---- Subtitle ----
   s_subtitle_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_subtitle_layer, GColorClear);
-  text_layer_set_text_color(s_subtitle_layer, GColorLightGray);
   text_layer_set_text_alignment(s_subtitle_layer, GTextAlignmentCenter);
   layer_add_child(root, text_layer_get_layer(s_subtitle_layer));
 
   // ---- Fact ----
   s_fact_layer = text_layer_create(GRectZero);
   text_layer_set_background_color(s_fact_layer, GColorClear);
-  text_layer_set_text_color(s_fact_layer, GColorYellow);
   text_layer_set_text_alignment(s_fact_layer, GTextAlignmentCenter);
   text_layer_set_overflow_mode(s_fact_layer, GTextOverflowModeWordWrap);
   layer_add_child(root, text_layer_get_layer(s_fact_layer));
 
-  // ---- Frames & fonts for the current text size ----
+  // ---- Frames, fonts & colors for the current settings ----
   prv_apply_layout();
+  prv_apply_colors();
 
   // ---- Initial render ----
   time_t now = time(NULL);
@@ -237,10 +307,23 @@ static void prv_window_unload(Window *window) {
 // ---------------------------------------------------------------------------
 // Init / deinit
 // ---------------------------------------------------------------------------
+static void prv_load_settings(void) {
+  if (persist_exists(PERSIST_KEY_TEXT_SIZE)) {
+    s_text_size = prv_clamp_text_size(persist_read_int(PERSIST_KEY_TEXT_SIZE));
+  }
+  if (persist_exists(PERSIST_KEY_SHOW_SUBTITLE)) {
+    s_show_subtitle = persist_read_bool(PERSIST_KEY_SHOW_SUBTITLE);
+  }
+  if (persist_exists(PERSIST_KEY_BG_COLOR)) {
+    s_bg_color_hex = persist_read_int(PERSIST_KEY_BG_COLOR);
+  }
+  if (persist_exists(PERSIST_KEY_FACT_COLOR)) {
+    s_fact_color_hex = persist_read_int(PERSIST_KEY_FACT_COLOR);
+  }
+}
+
 static void prv_init(void) {
-  s_text_size = persist_exists(PERSIST_KEY_TEXT_SIZE)
-                    ? prv_clamp_text_size(persist_read_int(PERSIST_KEY_TEXT_SIZE))
-                    : TEXT_SIZE_DEFAULT;
+  prv_load_settings();
 
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){
@@ -248,7 +331,9 @@ static void prv_init(void) {
     .unload = prv_window_unload,
   });
   window_stack_push(s_window, true);
+
   tick_timer_service_subscribe(MINUTE_UNIT, prv_tick_handler);
+  accel_tap_service_subscribe(prv_tap_handler);
 
   app_message_register_inbox_received(prv_inbox_received);
   app_message_open(64, 16);
@@ -256,6 +341,7 @@ static void prv_init(void) {
 
 static void prv_deinit(void) {
   tick_timer_service_unsubscribe();
+  accel_tap_service_unsubscribe();
   app_message_deregister_callbacks();
   window_destroy(s_window);
 }
